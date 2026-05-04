@@ -1,0 +1,5 @@
+app_identifier "com.thomashart.SpamShield"
+apple_id "thomashartdev@gmail.com"
+
+# Pulled from CI secrets; locally, set APPLE_TEAM_ID in your shell.
+team_id ENV["APPLE_TEAM_ID"]

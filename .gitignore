@@ -1,0 +1,31 @@
+# Xcode
+*.xcodeproj/
+build/
+DerivedData/
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+
+# Generated
+SpamShield.xcodeproj/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/test_output
+fastlane/screenshots/**/*.png
+*.mobileprovision
+*.p12
+*.p8
+
+# Build output
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# macOS
+.DS_Store
+
+# Ruby
+vendor/
+.bundle/

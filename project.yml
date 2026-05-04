@@ -1,0 +1,49 @@
+name: SpamShield
+options:
+  bundleIdPrefix: com.thomashart
+  deploymentTarget:
+    iOS: "16.0"
+  developmentLanguage: en
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: $(APPLE_TEAM_ID)
+
+targets:
+  SpamShield:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.thomashart.SpamShield
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/SpamShield.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - target: SpamShieldCallDirectory
+        embed: true
+        codeSign: true
+    entitlements:
+      path: App/SpamShield.entitlements
+
+  SpamShieldCallDirectory:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: CallDirectory
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.thomashart.SpamShield.CallDirectory
+        INFOPLIST_FILE: CallDirectory/Info.plist
+        CODE_SIGN_ENTITLEMENTS: CallDirectory/CallDirectory.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - sdk: CallKit.framework
+    entitlements:
+      path: CallDirectory/CallDirectory.entitlements
