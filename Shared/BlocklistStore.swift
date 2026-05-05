@@ -52,4 +52,34 @@ final class BlocklistStore {
         guard let data = try? JSONEncoder().encode(entries) else { return }
         defaults.set(data, forKey: Self.labeledKey)
     }
+
+    // MARK: - Server config (host app only; extension never makes network calls)
+
+    private static let serverURLKey = "serverURL"
+    private static let apiKeyKey = "apiKey"
+    private static let lastSyncKey = "lastSyncedAt"
+
+    var serverURL: URL? {
+        guard let s = defaults.string(forKey: Self.serverURLKey),
+              let u = URL(string: s)
+        else { return nil }
+        return u
+    }
+
+    var apiKey: String {
+        defaults.string(forKey: Self.apiKeyKey) ?? ""
+    }
+
+    var lastSyncedAt: Date? {
+        defaults.object(forKey: Self.lastSyncKey) as? Date
+    }
+
+    func setServerConfig(url: String, apiKey: String) {
+        defaults.set(url.trimmingCharacters(in: .whitespaces), forKey: Self.serverURLKey)
+        defaults.set(apiKey.trimmingCharacters(in: .whitespaces), forKey: Self.apiKeyKey)
+    }
+
+    func setLastSyncedAt(_ date: Date) {
+        defaults.set(date, forKey: Self.lastSyncKey)
+    }
 }
