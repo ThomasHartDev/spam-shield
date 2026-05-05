@@ -47,7 +47,7 @@ struct ContentView: View {
                              ? "Enabled in iOS Settings ✓"
                              : "Not enabled — Settings → Phone → Call Blocking & Identification → toggle SpamShield on.")
                             .font(.footnote)
-                            .foregroundStyle(extensionEnabled ? .secondary : .red)
+                            .foregroundStyle(extensionEnabled ? Color.secondary : Color.red)
                     }
                     if let statusMessage {
                         Text(statusMessage)
