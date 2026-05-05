@@ -1,8 +1,9 @@
-name: Build & TestFlight
+name: Build
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -10,9 +11,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  # Always-on compile check. Builds for the iOS Simulator without signing,
+  # so it works before Apple Developer enrollment lands and before any
+  # GitHub secrets are configured. This is the fast feedback loop for
+  # "does my Swift code actually compile".
+  compile-check:
     runs-on: macos-14
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -26,12 +31,67 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      - name: Build for simulator (no signing)
+        run: |
+          xcodebuild \
+            -project SpamShield.xcodeproj \
+            -scheme SpamShield \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+  # TestFlight upload. Skips early if Apple secrets aren't set so we don't
+  # burn runner minutes on a doomed run. Once enrollment lands and the four
+  # secrets are configured (APPLE_TEAM_ID, APP_STORE_CONNECT_KEY_ID,
+  # APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_API_KEY), this job
+  # runs on every push to main and on workflow_dispatch.
+  testflight:
+    runs-on: macos-14
+    needs: compile-check
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Apple secrets
+        id: gate
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: |
+          if [ -z "$APPLE_TEAM_ID" ] || [ -z "$APP_STORE_CONNECT_KEY_ID" ] || [ -z "$APP_STORE_CONNECT_ISSUER_ID" ] || [ -z "$APP_STORE_CONNECT_API_KEY" ]; then
+            echo "Apple secrets not configured; skipping TestFlight upload. See README for setup."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        if: steps.gate.outputs.ready == 'true'
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        if: steps.gate.outputs.ready == 'true'
+        run: xcodegen generate
+
       - uses: ruby/setup-ruby@v1
+        if: steps.gate.outputs.ready == 'true'
         with:
           ruby-version: "3.2"
           bundler-cache: true
 
       - name: Build & upload to TestFlight
+        if: steps.gate.outputs.ready == 'true'
         env:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -40,7 +100,7 @@ jobs:
         run: bundle exec fastlane beta
 
       - name: Upload IPA artifact
-        if: always()
+        if: steps.gate.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: SpamShield-ipa
