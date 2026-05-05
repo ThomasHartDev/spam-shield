@@ -7,6 +7,10 @@ struct ContentView: View {
     @State private var newLabel: String = "Spam"
     @State private var statusMessage: String?
     @State private var extensionEnabled: Bool?
+    @State private var serverURL: String = ""
+    @State private var apiKey: String = ""
+    @State private var lastSync: Date?
+    @State private var isSyncing: Bool = false
 
     private let extensionId = "com.thomashart.SpamShield.CallDirectory"
 
@@ -24,7 +28,7 @@ struct ContentView: View {
 
                 Section("Blocked (\(entries.count))") {
                     if entries.isEmpty {
-                        Text("Nothing yet. Add a number above.")
+                        Text("Nothing yet. Add a number above or sync from the server.")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(entries, id: \.number) { entry in
@@ -37,6 +41,23 @@ struct ContentView: View {
                             }
                         }
                         .onDelete(perform: removeBlocked)
+                    }
+                }
+
+                Section("Server sync") {
+                    TextField("https://your-server.vercel.app", text: $serverURL)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    SecureField("API key", text: $apiKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    Button(isSyncing ? "Syncing…" : "Save & sync now", action: saveAndSync)
+                        .disabled(isSyncing || serverURL.isEmpty || apiKey.isEmpty)
+                    if let lastSync {
+                        Text("Last synced \(lastSync.formatted(.relative(presentation: .named)))")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -63,19 +84,26 @@ struct ContentView: View {
             .onAppear {
                 load()
                 checkExtensionStatus()
+                if !apiKey.isEmpty && !serverURL.isEmpty {
+                    Task { await runSync() }
+                }
             }
         }
     }
 
     private func load() {
-        let blocked = Set(BlocklistStore.shared.blockedNumbers())
+        let store = BlocklistStore.shared
+        let blocked = Set(store.blockedNumbers())
         let labeledByNumber = Dictionary(
-            BlocklistStore.shared.labeledNumbers().map { ($0.number, $0.label) },
+            store.labeledNumbers().map { ($0.number, $0.label) },
             uniquingKeysWith: { first, _ in first }
         )
         entries = blocked
             .sorted()
             .map { LabeledNumber(number: $0, label: labeledByNumber[$0] ?? "Spam") }
+        serverURL = store.serverURL?.absoluteString ?? ""
+        apiKey = store.apiKey
+        lastSync = store.lastSyncedAt
     }
 
     private func addBlocked() {
@@ -114,6 +142,32 @@ struct ContentView: View {
 
         load()
         reloadExtension()
+    }
+
+    private func saveAndSync() {
+        BlocklistStore.shared.setServerConfig(url: serverURL, apiKey: apiKey)
+        Task { await runSync() }
+    }
+
+    private func runSync() async {
+        await MainActor.run {
+            isSyncing = true
+            statusMessage = "Syncing from server…"
+        }
+        do {
+            let result = try await RemoteSync.sync()
+            await MainActor.run {
+                isSyncing = false
+                load()
+                statusMessage = "Synced. \(result.newlyAdded) new, \(result.totalAfterMerge) total."
+            }
+            reloadExtension()
+        } catch {
+            await MainActor.run {
+                isSyncing = false
+                statusMessage = "Sync failed: \(error.localizedDescription)"
+            }
+        }
     }
 
     private func reloadExtension() {
